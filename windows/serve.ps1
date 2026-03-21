@@ -32,6 +32,7 @@ $cfg = @{
     TOP_K          = "40"
     TOP_P          = "0.95"
     MIN_P          = "0.05"
+    ENABLE_JINJA   = "false"
 }
 
 if (Test-Path $ConfigFile) {
@@ -176,8 +177,9 @@ function Start-Server ($bin, $modelPath) {
         --top-k         $cfg["TOP_K"] `
         --top-p         $cfg["TOP_P"] `
         --min-p         $cfg["MIN_P"] `
-        --jinja `
         --metrics
+
+    if ($cfg["ENABLE_JINJA"] -eq "true") { $argList += "--jinja" }
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""

@@ -37,6 +37,7 @@ TEMPERATURE="0.8"
 REPEAT_PENALTY="1.1"
 TOP_K="40"
 TOP_P="0.95"
+ENABLE_JINJA="false"
 MIN_P="0.05"
 
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -58,6 +59,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
             TOP_K)          TOP_K="$val" ;;
             TOP_P)          TOP_P="$val" ;;
             MIN_P)          MIN_P="$val" ;;
+            ENABLE_JINJA)   ENABLE_JINJA="$val" ;;
         esac
     done < "$CONFIG_FILE"
 fi
@@ -248,9 +250,9 @@ start_server() {
         --top-k         "$TOP_K"
         --top-p         "$TOP_P"
         --min-p         "$MIN_P"
-        --jinja \
         --metrics
     )
+    [[ "${ENABLE_JINJA,,}" == "true" ]] && cmd_args+=(--jinja)
 
     # 執行
     exec "$llama_server" "${cmd_args[@]}"
