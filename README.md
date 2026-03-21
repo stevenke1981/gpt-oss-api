@@ -21,11 +21,14 @@ gpt-oss-api/
 
 ## 快速開始
 
-### Windows
-```bat
-windows\download.bat   # 選擇並下載模型
-windows\manage.bat     # 管理已下載模型
-windows\serve.bat      # 啟動 API 服務
+### Windows (PowerShell)
+```powershell
+# 首次執行若遇到執行原則限制:
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+.\windows\download.ps1   # 選擇並下載模型
+.\windows\manage.ps1     # 管理已下載模型
+.\windows\serve.ps1      # 啟動 API 服務
 ```
 
 ### Linux / macOS
@@ -36,13 +39,16 @@ chmod +x linux/*.sh
 ./linux/serve.sh       # 啟動 API 服務
 ```
 
-### 命令列快速模式 (Linux)
+### 命令列快速模式
 ```bash
-# 直接指定模型下載
+# Linux - 直接指定模型下載
 ./linux/download.sh OpenAI-20B-NEOPlus-Uncensored-Q8_0.gguf
 
-# 直接指定模型路徑啟動服務
+# Linux - 直接指定模型路徑啟動服務
 ./linux/serve.sh ./models/OpenAI-20B-NEOPlus-Uncensored-Q8_0.gguf 8080
+
+# Windows PowerShell 快速啟動
+.\windows\serve.ps1 -Model ".\models\model.gguf" -Port 8080
 ```
 
 ## 模型選擇指南
