@@ -75,7 +75,12 @@ function Get-AssetUrl ($assets, $backend) {
         "cpu"     { "win-cpu-x64" }
         default   { "win-cpu-x64" }
     }
-    $asset = $assets | Where-Object { $_.name -like "*$pattern*" -and $_.name -like "*.zip" } | Select-Object -First 1
+    # Must start with "llama-b" to exclude cudart-* and other auxiliary packages
+    $asset = $assets | Where-Object {
+        $_.name -like "llama-b*" -and
+        $_.name -like "*$pattern*" -and
+        $_.name -like "*.zip"
+    } | Select-Object -First 1
     return $asset
 }
 
