@@ -233,7 +233,42 @@ MIN_P=0.05
 
 ---
 
-## 八、常見問題
+## 八、開放區網存取
+
+預設服務只綁定 `127.0.0.1`（僅本機），執行防火牆腳本可一鍵開放區網：
+
+### Windows（需要系統管理員）
+
+```powershell
+.\windows\firewall.ps1
+```
+
+腳本會自動：
+1. 在 Windows 防火牆新增輸入規則（TCP 8080）
+2. 將 `config/settings.ini` 的 `HOST` 改為 `0.0.0.0`
+
+### Linux
+
+```bash
+./linux/firewall.sh
+```
+
+自動偵測並設定 `ufw` / `firewalld` / `iptables`，同時更新 config。
+
+設定完成後重新啟動服務，區網裝置即可透過以下位址連線：
+
+```
+http://<你的IP>:8080/v1/chat/completions
+http://<你的IP>:8080   ← Web UI
+```
+
+> **安全提醒：** `0.0.0.0` 會讓服務對區網所有裝置開放，請確認網路環境安全。若需要還原：
+> - Windows：`Remove-NetFirewallRule -DisplayName "llama-server LAN"`
+> - Linux (ufw)：`sudo ufw delete allow 8080/tcp`
+
+---
+
+## 十、常見問題
 
 **Q: 服務啟動後立即退出？**
 - VRAM 不足：降低 `N_GPU_LAYERS` 或 `CTX_SIZE`
