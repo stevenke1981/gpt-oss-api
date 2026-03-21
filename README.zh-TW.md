@@ -268,7 +268,80 @@ http://<你的IP>:8080   ← Web UI
 
 ---
 
-## 十、常見問題
+## 十、服務狀態監控
+
+### 啟動監控面板
+
+**Linux：**
+```bash
+./linux/status.sh              # 每 3 秒自動刷新
+./linux/status.sh --once       # 只顯示一次
+./linux/status.sh 0.0.0.0 8080 # 指定 host/port
+```
+
+**Windows：**
+```powershell
+.\windows\status.ps1              # 每 3 秒自動刷新
+.\windows\status.ps1 -Once        # 只顯示一次
+.\windows\status.ps1 -Port 8080   # 指定 port
+```
+
+### 顯示資訊
+
+| 區塊 | 指標 |
+|------|------|
+| **Health** | 伺服器狀態、空閒/使用中的 slot 數 |
+| **Throughput** | Prompt 處理速度、生成速度（tok/s） |
+| **Tokens** | 累計處理的 prompt tokens 與生成 tokens |
+| **Requests** | 總請求數、失敗次數 |
+| **KV Cache** | 快取使用率（超過 80% 顯示紅色警告）、快取 token 數 |
+| **GPU** | 顯示卡名稱、使用率、VRAM 用量、溫度 |
+
+### 重點說明
+
+- 監控資料來自 llama-server 的 `/health` 和 `/metrics` 端點
+- `--metrics` 旗標已內建在 `serve.sh` / `serve.ps1`，不需額外設定
+- KV Cache 使用率過高（>80%）代表上下文快接滿，可降低 `CTX_SIZE` 或 `N_PARALLEL`
+- Slot 全部 active 時新請求會排隊，可增加 `N_PARALLEL`（需要更多 VRAM）
+
+---
+
+## 十一、Tool Use / Function Call
+
+### 關鍵設定
+
+```ini
+# config/settings.ini
+ENABLE_JINJA=false   # 一般對話（預設，安全）
+ENABLE_JINJA=true    # 啟用自訂 function call（注意：不要直接傳 URL 給模型）
+```
+
+### 官方推薦方式：OpenAI Agents SDK
+
+```bash
+pip install -r examples/requirements.txt
+python examples/agent_tools.py        # 互動模式
+python examples/agent_tools.py --demo # 跑內建範例
+```
+
+### 內建工具
+
+| 工具 | 說明 |
+|------|------|
+| `web_search(query)` | DuckDuckGo 搜尋（不需 API Key） |
+| `web_open(url)` | 抓取網頁內容（應用層執行，不靠模型 native tool） |
+| `get_weather(city)` | 即時天氣（wttr.in） |
+| `calculate(expr)` | 數學運算 |
+
+### 為什麼不能直接叫模型開 URL？
+
+GPT-OSS 20B 是用 OpenAI **Harmony format** 訓練的，模型的 native browsing 使用 `<|channel|>web.run` 格式。
+llama.cpp 可以解析這個格式的輸出，但**無法執行** → 500 錯誤。
+正確做法：應用層自己抓網頁，把內容以文字傳給模型。
+
+---
+
+## 十二、常見問題
 
 **Q: 服務啟動後立即退出？**
 - VRAM 不足：降低 `N_GPU_LAYERS` 或 `CTX_SIZE`
