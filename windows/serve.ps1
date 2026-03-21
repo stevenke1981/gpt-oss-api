@@ -3,9 +3,9 @@
 # Quick  : .\serve.ps1 -Model ".\models\model.gguf" -Port 8080
 
 param(
-    [string]$Model = "",
-    [string]$Host  = "",
-    [int]$Port     = 0
+    [string]$Model     = "",
+    [string]$BindHost  = "",
+    [int]$Port         = 0
 )
 
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -41,8 +41,8 @@ if (Test-Path $ConfigFile) {
         if ($cfg.ContainsKey($k)) { $cfg[$k] = $v }
     }
 }
-if ($Host -ne "") { $cfg["HOST"] = $Host }
-if ($Port -ne 0)  { $cfg["PORT"] = $Port.ToString() }
+if ($BindHost -ne "") { $cfg["HOST"] = $BindHost }
+if ($Port -ne 0)      { $cfg["PORT"] = $Port.ToString() }
 
 # --- find llama-server ---
 function Find-LlamaServer {
