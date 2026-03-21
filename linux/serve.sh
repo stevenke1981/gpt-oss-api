@@ -250,7 +250,6 @@ start_server() {
         --min-p         "$MIN_P"
         --flash-attn auto \
         --metrics
-        --log-format    text
     )
 
     # 執行

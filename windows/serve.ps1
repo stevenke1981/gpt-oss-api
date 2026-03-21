@@ -177,8 +177,7 @@ function Start-Server ($bin, $modelPath) {
         --top-p         $cfg["TOP_P"] `
         --min-p         $cfg["MIN_P"] `
         --flash-attn auto `
-        --metrics `
-        --log-format    text
+        --metrics
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
