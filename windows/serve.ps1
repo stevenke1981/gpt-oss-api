@@ -176,7 +176,7 @@ function Start-Server ($bin, $modelPath) {
         --top-k         $cfg["TOP_K"] `
         --top-p         $cfg["TOP_P"] `
         --min-p         $cfg["MIN_P"] `
-        --flash-attn `
+        --flash-attn auto `
         --metrics `
         --log-format    text
 
