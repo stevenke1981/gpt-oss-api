@@ -75,11 +75,25 @@ function Get-AssetUrl ($assets, $backend) {
         "cpu"     { "win-cpu-x64" }
         default   { "win-cpu-x64" }
     }
-    # Must start with "llama-b" to exclude cudart-* and other auxiliary packages
+    # Must start with "llama-b" to exclude cudart-* packages
     $asset = $assets | Where-Object {
         $_.name -like "llama-b*" -and
         $_.name -like "*$pattern*" -and
         $_.name -like "*.zip"
+    } | Select-Object -First 1
+    return $asset
+}
+
+# find the matching cudart runtime package (CUDA backends only)
+function Get-CudartAssetUrl ($assets, $backend) {
+    $pattern = switch ($backend) {
+        "cuda13"  { "cudart-llama-bin-win-cuda-13" }
+        "cuda12"  { "cudart-llama-bin-win-cuda-12" }
+        default   { $null }
+    }
+    if (-not $pattern) { return $null }
+    $asset = $assets | Where-Object {
+        $_.name -like "$pattern*" -and $_.name -like "*.zip"
     } | Select-Object -First 1
     return $asset
 }
@@ -99,9 +113,9 @@ function Get-FileWithProgress ($url, $dest) {
     Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
 }
 
-# --- extract zip ---
+# --- extract zip (first zip: ask before overwriting dir) ---
 function Expand-Release ($zipPath, $targetDir) {
-    step "Extracting to $targetDir"
+    step "Extracting $(Split-Path -Leaf $zipPath) to $targetDir"
     if (Test-Path $targetDir) {
         warn "Directory already exists: $targetDir"
         $ow = Read-Host "Overwrite? (y/N)"
@@ -110,7 +124,14 @@ function Expand-Release ($zipPath, $targetDir) {
     }
     New-Item -ItemType Directory -Path $targetDir | Out-Null
     Expand-Archive -Path $zipPath -DestinationPath $targetDir -Force
-    ok "Extracted successfully"
+    ok "Extracted: $(Split-Path -Leaf $zipPath)"
+}
+
+# --- merge zip into existing dir (no prompt, just overwrite files) ---
+function Merge-Release ($zipPath, $targetDir) {
+    step "Merging $(Split-Path -Leaf $zipPath) into $targetDir"
+    Expand-Archive -Path $zipPath -DestinationPath $targetDir -Force
+    ok "Merged: $(Split-Path -Leaf $zipPath)"
 }
 
 # --- find llama-server in extracted dir ---
@@ -176,9 +197,10 @@ switch ($override) {
 info "Using backend: $backend ($(Get-BackendLabel $backend))"
 
 # Step 2: fetch release
-$release = Get-LatestRelease
-$tag     = $release.tag_name
-$asset   = Get-AssetUrl $release.assets $backend
+$release      = Get-LatestRelease
+$tag          = $release.tag_name
+$asset        = Get-AssetUrl $release.assets $backend
+$cudartAsset  = Get-CudartAssetUrl $release.assets $backend
 
 if (-not $asset) {
     die "No matching asset found for backend '$backend' in release $tag.`nCheck manually: https://github.com/ggml-org/llama.cpp/releases"
@@ -190,34 +212,58 @@ $sizeMB   = [math]::Round($asset.size / 1MB, 1)
 
 Write-Host ""
 Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
-Write-Host ("  Release : {0}" -f $tag)
-Write-Host ("  Package : {0}" -f $zipName)
-Write-Host ("  Size    : {0} MB" -f $sizeMB)
-Write-Host ("  Install : {0}" -f $InstallDir)
+Write-Host ("  Release  : {0}" -f $tag)
+Write-Host ("  Package 1: {0}  ({1} MB)" -f $zipName, $sizeMB)
+if ($cudartAsset) {
+    $cudartMB = [math]::Round($cudartAsset.size / 1MB, 1)
+    Write-Host ("  Package 2: {0}  ({1} MB)" -f $cudartAsset.name, $cudartMB) -ForegroundColor DarkGray
+    Write-Host ("  Note     : Both will be merged into the same folder")
+}
+Write-Host ("  Install  : {0}" -f $InstallDir)
 Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
 Write-Host ""
 
 $go = Read-Host "Proceed? (Y/n)"
 if ($go -eq "n") { exit 0 }
 
-# Step 3: download
+# Step 3: download main binary
 $tmpZip = Join-Path $env:TEMP $zipName
 if (Test-Path $tmpZip) {
-    warn "Temp file exists: $tmpZip"
+    warn "Cached: $zipName"
     $reuse = Read-Host "Use cached download? (Y/n)"
     if ($reuse -eq "n") { Remove-Item $tmpZip -Force }
 }
-
 if (-not (Test-Path $tmpZip)) {
     step "Downloading $zipName"
     Get-FileWithProgress $zipUrl $tmpZip
-    ok "Downloaded: $tmpZip"
+    ok "Downloaded: $zipName"
 } else {
-    ok "Using cached: $tmpZip"
+    ok "Using cached: $zipName"
 }
 
-# Step 4: extract
+# Step 3b: download cudart if applicable
+$tmpCudart = $null
+if ($cudartAsset) {
+    $tmpCudart = Join-Path $env:TEMP $cudartAsset.name
+    if (Test-Path $tmpCudart) {
+        warn "Cached: $($cudartAsset.name)"
+        $reuse2 = Read-Host "Use cached download? (Y/n)"
+        if ($reuse2 -eq "n") { Remove-Item $tmpCudart -Force }
+    }
+    if (-not (Test-Path $tmpCudart)) {
+        step "Downloading $($cudartAsset.name)"
+        Get-FileWithProgress $cudartAsset.browser_download_url $tmpCudart
+        ok "Downloaded: $($cudartAsset.name)"
+    } else {
+        ok "Using cached: $($cudartAsset.name)"
+    }
+}
+
+# Step 4: extract main binary first, then merge cudart
 Expand-Release $tmpZip $InstallDir
+if ($tmpCudart) {
+    Merge-Release $tmpCudart $InstallDir
+}
 
 # Step 5: find binary
 $serverBin = Find-ServerBin $InstallDir
@@ -232,15 +278,13 @@ Test-Installation $serverBin
 # Step 7: CUDA runtime check
 if ($backend -in @("cuda12","cuda13")) {
     step "Checking CUDA runtime DLLs"
-    $cudaDlls = @("cublas64_12.dll","cublas64_13.dll","cublasLt64_12.dll","cublasLt64_13.dll")
     $serverDir = Split-Path -Parent $serverBin
-    $hasCuda = $cudaDlls | Where-Object { Test-Path (Join-Path $serverDir $_) }
-    if ($hasCuda) {
-        ok "CUDA runtime DLLs bundled in package"
+    $cudaDlls  = Get-ChildItem -Path $serverDir -Filter "cublas*.dll" -ErrorAction SilentlyContinue
+    if ($cudaDlls) {
+        ok "CUDA runtime DLLs present ($($cudaDlls.Count) files)"
     } else {
-        warn "CUDA DLLs not found next to binary."
-        info "If server fails, install CUDA Toolkit or copy cuBLAS DLLs:"
-        Write-Host "  https://developer.nvidia.com/cuda-downloads" -ForegroundColor DarkGray
+        warn "cuBLAS DLLs not found — GPU acceleration may not work."
+        info "Install CUDA Toolkit: https://developer.nvidia.com/cuda-downloads"
     }
 }
 
