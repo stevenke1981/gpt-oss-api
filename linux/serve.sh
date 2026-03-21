@@ -182,22 +182,22 @@ configure_params() {
     echo
 
     read -rp "  服務位址        [${HOST}]: " v
-    [[ -n "$v" ]] && HOST="$v"
+    HOST="${v:-$HOST}"
 
     read -rp "  服務埠號        [${PORT}]: " v
-    [[ -n "$v" ]] && PORT="$v"
+    PORT="${v:-$PORT}"
 
     read -rp "  上下文長度      [${CTX_SIZE}] (8192-131072): " v
-    [[ -n "$v" ]] && CTX_SIZE="$v"
+    CTX_SIZE="${v:-$CTX_SIZE}"
 
     read -rp "  GPU 層數        [${N_GPU_LAYERS}] (0=純CPU, -1=全GPU): " v
-    [[ -n "$v" ]] && N_GPU_LAYERS="$v"
+    N_GPU_LAYERS="${v:-$N_GPU_LAYERS}"
 
     read -rp "  CPU 執行緒數    [${N_THREADS}]: " v
-    [[ -n "$v" ]] && N_THREADS="$v"
+    N_THREADS="${v:-$N_THREADS}"
 
     read -rp "  平行處理槽數    [${N_PARALLEL}]: " v
-    [[ -n "$v" ]] && N_PARALLEL="$v"
+    N_PARALLEL="${v:-$N_PARALLEL}"
 }
 
 # ─── 啟動服務 ─────────────────────────────────────────────────
