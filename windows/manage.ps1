@@ -1,284 +1,239 @@
-# ============================================================
-# GPT-OSS 20B 模型管理腳本 (Windows PowerShell)
-# 用途: 列出、查看資訊、刪除已下載的 GGUF 模型
-# 執行: .\manage.ps1
-# ============================================================
-
-$OutputEncoding = [System.Text.Encoding]::UTF8
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+# GPT-OSS 20B Model Manager (Windows PowerShell)
+# Usage: .\manage.ps1
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RootDir   = Split-Path -Parent $ScriptDir
 $ModelsDir = Join-Path $RootDir "models"
 
-function Write-Info    ($msg) { Write-Host "[資訊] $msg" -ForegroundColor Cyan }
-function Write-Success ($msg) { Write-Host "[成功] $msg" -ForegroundColor Green }
-function Write-Warn    ($msg) { Write-Host "[警告] $msg" -ForegroundColor Yellow }
-function Write-Err     ($msg) { Write-Host "[錯誤] $msg" -ForegroundColor Red }
+function info  ($m) { Write-Host "[INFO]    $m" -ForegroundColor Cyan }
+function ok    ($m) { Write-Host "[OK]      $m" -ForegroundColor Green }
+function warn  ($m) { Write-Host "[WARN]    $m" -ForegroundColor Yellow }
+function err   ($m) { Write-Host "[ERROR]   $m" -ForegroundColor Red }
 
 if (-not (Test-Path $ModelsDir)) { New-Item -ItemType Directory -Path $ModelsDir | Out-Null }
 
-# ─── 取得模型清單 ─────────────────────────────────────────────
-function Get-ModelList {
-    return @(Get-ChildItem -Path $ModelsDir -Filter "*.gguf" -File | Sort-Object Name)
-}
+function Get-Models { @(Get-ChildItem -Path $ModelsDir -Filter "*.gguf" -File | Sort-Object Name) }
 
-# ─── 列出所有模型 ─────────────────────────────────────────────
+# --- list all models ---
 function Show-List {
     Clear-Host
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "  已下載的模型清單" -ForegroundColor White
-    Write-Host "  目錄: $ModelsDir" -ForegroundColor DarkGray
+    Write-Host "  Downloaded Models" -ForegroundColor White
+    Write-Host "  Dir: $ModelsDir" -ForegroundColor DarkGray
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host ""
 
-    $files = Get-ModelList
+    $files = Get-Models
     if ($files.Count -eq 0) {
-        Write-Host "  [提示] 尚未下載任何模型，請先執行 .\download.ps1" -ForegroundColor Yellow
-        Write-Host ""
-        Read-Host "按 Enter 返回"
-        return
+        warn "No models found. Run .\download.ps1 first."
+        Write-Host ""; Read-Host "Press Enter to return"; return
     }
 
-    $totalBytes = 0
+    $total = 0
     $i = 1
     foreach ($f in $files) {
-        $sizeMB = [math]::Round($f.Length / 1MB, 1)
-        $totalBytes += $f.Length
-        Write-Host ""
+        $mb = [math]::Round($f.Length / 1MB, 1)
+        $total += $f.Length
         Write-Host ("  [{0}] {1}" -f $i, $f.Name) -ForegroundColor White
-        Write-Host ("      大小: {0} MB" -f $sizeMB) -ForegroundColor DarkGray
-        Write-Host ("      路徑: {0}" -f $f.FullName) -ForegroundColor DarkGray
-        Write-Host ("      修改: {0}" -f $f.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")) -ForegroundColor DarkGray
+        Write-Host ("       {0} MB  |  {1}" -f $mb, $f.LastWriteTime.ToString("yyyy-MM-dd HH:mm")) -ForegroundColor DarkGray
         $i++
     }
 
-    $totalGB = [math]::Round($totalBytes / 1GB, 2)
+    $gb = [math]::Round($total / 1GB, 2)
     Write-Host ""
-    Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host ("  共 {0} 個模型，總計 {1} GB" -f $files.Count, $totalGB) -ForegroundColor Cyan
-    Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host ("  Total: {0} models, {1} GB" -f $files.Count, $gb) -ForegroundColor Cyan
     Write-Host ""
-    Read-Host "按 Enter 返回"
+    Read-Host "Press Enter to return"
 }
 
-# ─── 查看模型詳細資訊 ─────────────────────────────────────────
+# --- model info ---
 function Show-Info {
     Clear-Host
-    Write-Host ""
-    Write-Host "=== 查看模型詳細資訊 ===" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host ""; Write-Host "=== Model Info ===" -ForegroundColor Cyan; Write-Host ""
 
-    $files = Get-ModelList
-    if ($files.Count -eq 0) {
-        Write-Host "  [提示] 尚未下載任何模型" -ForegroundColor Yellow
-        Read-Host "按 Enter 返回"; return
-    }
+    $files = Get-Models
+    if ($files.Count -eq 0) { warn "No models found."; Read-Host "Press Enter"; return }
 
     for ($i = 0; $i -lt $files.Count; $i++) {
-        $sizeMB = [math]::Round($files[$i].Length / 1MB, 1)
-        Write-Host ("  [{0}] {1,-55} ({2} MB)" -f ($i+1), $files[$i].Name, $sizeMB)
+        $mb = [math]::Round($files[$i].Length / 1MB, 1)
+        Write-Host ("  [{0}] {1}  ({2} MB)" -f ($i+1), $files[$i].Name, $mb)
     }
     Write-Host ""
-    $num = Read-Host "請輸入模型編號 (0=取消)"
-    if ($num -eq "0" -or [string]::IsNullOrWhiteSpace($num)) { return }
+    $n = Read-Host "Select number (0=cancel)"
+    if ($n -eq "0" -or [string]::IsNullOrWhiteSpace($n)) { return }
 
-    $idx = [int]$num - 1
-    if ($idx -lt 0 -or $idx -ge $files.Count) { Write-Err "無效編號"; Start-Sleep 2; return }
+    $idx = [int]$n - 1
+    if ($idx -lt 0 -or $idx -ge $files.Count) { err "Invalid number"; Start-Sleep 2; return }
 
-    $f = $files[$idx]
-    $sizeMB = [math]::Round($f.Length / 1MB, 1)
-    $sizeGB = [math]::Round($f.Length / 1GB, 2)
-
-    Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host ("  模型資訊: {0}" -f $f.Name) -ForegroundColor White
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host ("  {0,-14} {1}" -f "檔名:", $f.Name)
-    Write-Host ("  {0,-14} {1} MB (~{2} GB)" -f "大小:", $sizeMB, $sizeGB)
-    Write-Host ("  {0,-14} {1}" -f "完整路徑:", $f.FullName)
-    Write-Host ("  {0,-14} {1}" -f "修改時間:", $f.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss"))
+    $f  = $files[$idx]
+    $mb = [math]::Round($f.Length / 1MB, 1)
+    $gb = [math]::Round($f.Length / 1GB, 2)
 
     Write-Host ""
-    Write-Host "  量化類型解析:" -ForegroundColor White
-    if ($f.Name -match "IQ4_NL") { Write-Host "    類型: IQ4_NL (4-bit Imatrix) - 創意/娛樂用途，Imatrix 效果最強" -ForegroundColor Yellow }
-    if ($f.Name -match "Q5_1")   { Write-Host "    類型: Q5_1 (5-bit) - 均衡一般用途，穩定性佳" -ForegroundColor Green }
-    if ($f.Name -match "Q8_0")   { Write-Host "    類型: Q8_0 (8-bit) - 最高品質" -ForegroundColor Magenta }
-    if ($f.Name -match "TRI")    { Write-Host "    Matrix: TRI-Matrix (3個資料集平均，最穩定)" }
-    elseif ($f.Name -match "-DI-") { Write-Host "    Matrix: DI-Matrix (2個資料集平均，平衡特性)" }
-    else                          { Write-Host "    Matrix: 標準 Imatrix (單資料集)" }
-    if ($f.Name -match "CODE")   { Write-Host "    特化: 程式碼生成增強版" -ForegroundColor Cyan }
-    if ($f.Name -match "HRR")    { Write-Host "    特化: HRR (高重複率減少優化)" }
+    Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+    Write-Host ("  Name : {0}" -f $f.Name) -ForegroundColor White
+    Write-Host ("  Size : {0} MB  (~{1} GB)" -f $mb, $gb)
+    Write-Host ("  Path : {0}" -f $f.FullName) -ForegroundColor DarkGray
+    Write-Host ("  Date : {0}" -f $f.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss"))
+    Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
 
     Write-Host ""
-    Write-Host "  建議啟動參數:" -ForegroundColor White
-    Write-Host "    --ctx-size    8192      (最大支援 131072)"
-    Write-Host "    --temp        0.8       (創意用 1.0-1.2 / 程式碼用 0.6)"
-    Write-Host "    --rep-penalty 1.1       (重要! 防止重複)"
-    Write-Host "    --top-k       40"
-    Write-Host "    --top-p       0.95"
-    Write-Host "    --min-p       0.05"
+    Write-Host "  Quantization:" -ForegroundColor White
+    if ($f.Name -match "IQ4_NL") { Write-Host "    Type   : IQ4_NL (4-bit Imatrix) - creative/adult content" -ForegroundColor Yellow }
+    if ($f.Name -match "Q5_1")   { Write-Host "    Type   : Q5_1 (5-bit) - balanced general use" -ForegroundColor Green }
+    if ($f.Name -match "Q8_0")   { Write-Host "    Type   : Q8_0 (8-bit) - highest quality" -ForegroundColor Magenta }
+    if ($f.Name -match "TRI")    { Write-Host "    Matrix : TRI-Matrix (3 datasets averaged)" }
+    elseif ($f.Name -match "-DI-") { Write-Host "    Matrix : DI-Matrix (2 datasets averaged)" }
+    else                          { Write-Host "    Matrix : Standard Imatrix" }
+    if ($f.Name -match "CODE")   { Write-Host "    Special: Code generation enhanced" -ForegroundColor Cyan }
+
+    Write-Host ""
+    Write-Host "  Recommended params:" -ForegroundColor White
+    Write-Host "    --ctx-size 8192  --temp 0.8  --repeat-penalty 1.1"
+    Write-Host "    --top-k 40  --top-p 0.95  --min-p 0.05"
     Write-Host ""
 
-    $doSha = Read-Host "是否計算 SHA256 校驗碼? (y/N)"
-    if ($doSha.ToLower() -eq "y") {
-        Write-Info "計算中 (大檔案需要數秒)..."
-        $sha = (Get-FileHash -Path $f.FullName -Algorithm SHA256).Hash
-        Write-Host "  SHA256: $sha" -ForegroundColor DarkGray
+    $s = Read-Host "Compute SHA256? (y/N)"
+    if ($s -eq "y") {
+        info "Computing SHA256..."
+        $hash = (Get-FileHash -Path $f.FullName -Algorithm SHA256).Hash
+        Write-Host "  SHA256: $hash" -ForegroundColor DarkGray
     }
 
-    Write-Host ""
-    Read-Host "按 Enter 返回"
+    Write-Host ""; Read-Host "Press Enter to return"
 }
 
-# ─── 刪除模型 ─────────────────────────────────────────────────
-function Remove-Model {
+# --- delete model ---
+function Remove-ModelFile {
     Clear-Host
-    Write-Host ""
-    Write-Host "=== 刪除模型 ===" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host ""; Write-Host "=== Delete Model ===" -ForegroundColor Cyan; Write-Host ""
 
-    $files = Get-ModelList
-    if ($files.Count -eq 0) {
-        Write-Host "  [提示] 尚未下載任何模型" -ForegroundColor Yellow
-        Read-Host "按 Enter 返回"; return
-    }
+    $files = Get-Models
+    if ($files.Count -eq 0) { warn "No models found."; Read-Host "Press Enter"; return }
 
     for ($i = 0; $i -lt $files.Count; $i++) {
-        $sizeMB = [math]::Round($files[$i].Length / 1MB, 1)
-        Write-Host ("  [{0}] {1,-55} ({2} MB)" -f ($i+1), $files[$i].Name, $sizeMB)
+        $mb = [math]::Round($files[$i].Length / 1MB, 1)
+        Write-Host ("  [{0}] {1}  ({2} MB)" -f ($i+1), $files[$i].Name, $mb)
     }
     Write-Host ""
-    $num = Read-Host "請輸入要刪除的模型編號 (0=取消)"
-    if ($num -eq "0" -or [string]::IsNullOrWhiteSpace($num)) { return }
+    $n = Read-Host "Select number to delete (0=cancel)"
+    if ($n -eq "0" -or [string]::IsNullOrWhiteSpace($n)) { return }
 
-    $idx = [int]$num - 1
-    if ($idx -lt 0 -or $idx -ge $files.Count) { Write-Err "無效編號"; Start-Sleep 2; return }
+    $idx = [int]$n - 1
+    if ($idx -lt 0 -or $idx -ge $files.Count) { err "Invalid number"; Start-Sleep 2; return }
 
-    $f = $files[$idx]
-    $sizeMB = [math]::Round($f.Length / 1MB, 1)
+    $f  = $files[$idx]
+    $mb = [math]::Round($f.Length / 1MB, 1)
 
     Write-Host ""
-    Write-Warn "即將刪除: $($f.Name)"
-    Write-Warn "檔案大小: ${sizeMB} MB  (此操作無法復原)"
+    warn "About to delete: $($f.Name)"
+    warn "Size: ${mb} MB  (this cannot be undone)"
     Write-Host ""
-    $confirm = Read-Host "確認刪除? 請輸入 YES 確認"
-    if ($confirm -ne "YES") {
-        Write-Info "已取消刪除"
-        Start-Sleep 1; return
-    }
+    $c = Read-Host "Type YES to confirm"
+    if ($c -ne "YES") { info "Cancelled."; Start-Sleep 1; return }
 
     Remove-Item $f.FullName -Force
-    Write-Success "已刪除: $($f.Name)"
+    ok "Deleted: $($f.Name)"
     Start-Sleep 2
 }
 
-# ─── 磁碟空間 ─────────────────────────────────────────────────
-function Show-DiskInfo {
+# --- disk info ---
+function Show-Disk {
     Clear-Host
-    Write-Host ""
-    Write-Host "=== 磁碟空間資訊 ===" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host ""; Write-Host "=== Disk Space ===" -ForegroundColor Cyan; Write-Host ""
 
     $drive = Split-Path -Qualifier $ModelsDir
-    $disk  = Get-PSDrive ($drive.TrimEnd(':'))
-    $usedGB  = [math]::Round($disk.Used  / 1GB, 1)
-    $freeGB  = [math]::Round($disk.Free  / 1GB, 1)
-    $totalGB = [math]::Round(($disk.Used + $disk.Free) / 1GB, 1)
+    $d = Get-PSDrive ($drive.TrimEnd(':'))
+    $free  = [math]::Round($d.Free  / 1GB, 1)
+    $used  = [math]::Round($d.Used  / 1GB, 1)
+    $total = [math]::Round(($d.Used + $d.Free) / 1GB, 1)
 
-    Write-Host ("  {0,-14} {1}" -f "磁碟機:", $drive)
-    Write-Host ("  {0,-14} {1} GB" -f "總容量:", $totalGB)
-    Write-Host ("  {0,-14} {1} GB" -f "已使用:", $usedGB)
-    Write-Host ("  {0,-14} " -f "可用空間:") -NoNewline
-    Write-Host ("{0} GB" -f $freeGB) -ForegroundColor Green
+    Write-Host ("  Drive : {0}" -f $drive)
+    Write-Host ("  Total : {0} GB" -f $total)
+    Write-Host ("  Used  : {0} GB" -f $used)
+    Write-Host ("  Free  : " -f "") -NoNewline
+    Write-Host ("{0} GB" -f $free) -ForegroundColor Green
 
     Write-Host ""
-    Write-Host "  各量化類型所需空間:" -ForegroundColor White
-    Write-Host "    IQ4_NL   約 12 GB"
-    Write-Host "    Q5_1     約 16 GB"
-    Write-Host "    Q8_0     約 22 GB"
+    Write-Host "  Space needed per quantization type:" -ForegroundColor White
+    Write-Host "    IQ4_NL  ~12 GB"
+    Write-Host "    Q5_1    ~16 GB"
+    Write-Host "    Q8_0    ~22 GB"
 
-    $files = Get-ModelList
+    $files = Get-Models
     if ($files.Count -gt 0) {
-        $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
-        $modelGB = [math]::Round($totalBytes / 1GB, 2)
+        $bytes = ($files | Measure-Object -Property Length -Sum).Sum
+        $modelGB = [math]::Round($bytes / 1GB, 2)
         Write-Host ""
-        Write-Host "  models 目錄已用空間:" -ForegroundColor White
-        Write-Host ("    {0} 個模型，共 {1} GB" -f $files.Count, $modelGB)
+        Write-Host ("  Models dir: {0} models, {1} GB used" -f $files.Count, $modelGB)
     }
 
-    Write-Host ""
-    Read-Host "按 Enter 返回"
+    Write-Host ""; Read-Host "Press Enter to return"
 }
 
-# ─── 清理臨時檔案 ─────────────────────────────────────────────
+# --- clean temp files ---
 function Clear-Temp {
     Clear-Host
-    Write-Host ""
-    Write-Host "=== 清理不完整的下載檔案 ===" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host ""; Write-Host "=== Clean Temp Files ===" -ForegroundColor Cyan; Write-Host ""
 
-    $tmpFiles = @(Get-ChildItem -Path $ModelsDir -Include "*.tmp","*.part","*.download","*.incomplete" -File 2>$null)
+    $tmp = @(Get-ChildItem -Path $ModelsDir -Include "*.tmp","*.part","*.download","*.incomplete" -File -ErrorAction SilentlyContinue)
 
-    if ($tmpFiles.Count -eq 0) {
-        Write-Info "未找到需要清理的臨時檔案"
+    if ($tmp.Count -eq 0) {
+        info "No temp files found."
     } else {
-        Write-Host ("  找到 {0} 個臨時檔案:" -f $tmpFiles.Count) -ForegroundColor Yellow
-        foreach ($f in $tmpFiles) {
-            $sizeMB = [math]::Round($f.Length / 1MB, 1)
-            Write-Host ("    {0}  ({1} MB)" -f $f.Name, $sizeMB)
+        warn "$($tmp.Count) temp file(s) found:"
+        foreach ($f in $tmp) {
+            $mb = [math]::Round($f.Length / 1MB, 1)
+            Write-Host ("    {0}  ({1} MB)" -f $f.Name, $mb)
         }
         Write-Host ""
-        $clean = Read-Host "是否刪除以上臨時檔案? (y/N)"
-        if ($clean.ToLower() -eq "y") {
-            foreach ($f in $tmpFiles) {
-                Remove-Item $f.FullName -Force
-                Write-Success "已刪除: $($f.Name)"
-            }
+        $c = Read-Host "Delete all? (y/N)"
+        if ($c -eq "y") {
+            foreach ($f in $tmp) { Remove-Item $f.FullName -Force; ok "Deleted: $($f.Name)" }
         } else {
-            Write-Info "已取消清理"
+            info "Cancelled."
         }
     }
 
-    Write-Host ""
-    Read-Host "按 Enter 返回"
+    Write-Host ""; Read-Host "Press Enter to return"
 }
 
-# ─── 主選單 ───────────────────────────────────────────────────
+# --- main menu ---
 while ($true) {
     Clear-Host
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "  GPT-OSS 20B 模型管理工具" -ForegroundColor White
-    Write-Host "  模型目錄: $ModelsDir" -ForegroundColor DarkGray
+    Write-Host "  GPT-OSS 20B Model Manager" -ForegroundColor White
+    Write-Host "  Models: $ModelsDir" -ForegroundColor DarkGray
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host ""
 
-    $files = Get-ModelList
-    if ($files.Count -gt 0) {
-        Write-Host ("  已下載模型: {0} 個" -f $files.Count) -ForegroundColor Green
+    $files = Get-Models
+    $cnt = $files.Count
+    if ($cnt -gt 0) {
+        Write-Host ("  Downloaded: {0} model(s)" -f $cnt) -ForegroundColor Green
     } else {
-        Write-Host "  已下載模型: 無" -ForegroundColor Yellow
+        Write-Host "  Downloaded: none" -ForegroundColor Yellow
     }
+
     Write-Host ""
-    Write-Host "  [1] 列出所有已下載模型"
-    Write-Host "  [2] 查看模型詳細資訊"
-    Write-Host "  [3] 刪除模型"
-    Write-Host "  [4] 磁碟空間資訊"
-    Write-Host "  [5] 清理不完整的下載檔案"
-    Write-Host "  [0] 結束"
+    Write-Host "  [1] List all models"
+    Write-Host "  [2] Model details"
+    Write-Host "  [3] Delete a model"
+    Write-Host "  [4] Disk space info"
+    Write-Host "  [5] Clean temp files"
+    Write-Host "  [0] Exit"
     Write-Host ""
-    $choice = Read-Host "請選擇操作 (0-5)"
+    $choice = Read-Host "Select (0-5)"
 
     switch ($choice) {
         "1" { Show-List }
         "2" { Show-Info }
-        "3" { Remove-Model }
-        "4" { Show-DiskInfo }
+        "3" { Remove-ModelFile }
+        "4" { Show-Disk }
         "5" { Clear-Temp }
         "0" { Write-Host ""; exit 0 }
-        default { Write-Err "無效選項"; Start-Sleep 1 }
+        default { err "Invalid option"; Start-Sleep 1 }
     }
 }

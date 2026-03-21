@@ -1,30 +1,24 @@
-# ============================================================
-# GPT-OSS 20B 模型服務腳本 (Windows PowerShell)
-# 用途: 使用 llama.cpp 啟動 OpenAI 相容 API 服務
-# 執行: .\serve.ps1
-# 快速: .\serve.ps1 -Model ".\models\model.gguf" -Port 8080
-# ============================================================
+# GPT-OSS 20B Model Server (Windows PowerShell)
+# Usage  : .\serve.ps1
+# Quick  : .\serve.ps1 -Model ".\models\model.gguf" -Port 8080
 
 param(
-    [string]$Model  = "",
-    [string]$Host   = "",
-    [int]$Port      = 0
+    [string]$Model = "",
+    [string]$Host  = "",
+    [int]$Port     = 0
 )
 
-$OutputEncoding = [System.Text.Encoding]::UTF8
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RootDir    = Split-Path -Parent $ScriptDir
+$ModelsDir  = Join-Path $RootDir "models"
+$ConfigFile = Join-Path $RootDir "config\settings.ini"
 
-$ScriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RootDir     = Split-Path -Parent $ScriptDir
-$ModelsDir   = Join-Path $RootDir "models"
-$ConfigFile  = Join-Path $RootDir "config\settings.ini"
+function info  ($m) { Write-Host "[INFO]    $m" -ForegroundColor Cyan }
+function ok    ($m) { Write-Host "[OK]      $m" -ForegroundColor Green }
+function warn  ($m) { Write-Host "[WARN]    $m" -ForegroundColor Yellow }
+function err   ($m) { Write-Host "[ERROR]   $m" -ForegroundColor Red }
 
-function Write-Info    ($msg) { Write-Host "[資訊] $msg" -ForegroundColor Cyan }
-function Write-Success ($msg) { Write-Host "[成功] $msg" -ForegroundColor Green }
-function Write-Warn    ($msg) { Write-Host "[警告] $msg" -ForegroundColor Yellow }
-function Write-Err     ($msg) { Write-Host "[錯誤] $msg" -ForegroundColor Red }
-
-# ─── 載入設定檔 ───────────────────────────────────────────────
+# --- load config ---
 $cfg = @{
     HOST           = "127.0.0.1"
     PORT           = "8080"
@@ -43,19 +37,16 @@ $cfg = @{
 if (Test-Path $ConfigFile) {
     Get-Content $ConfigFile | Where-Object { $_ -notmatch '^\s*[#\[]' -and $_ -match '=' } | ForEach-Object {
         $parts = $_ -split '=', 2
-        $key = $parts[0].Trim()
-        $val = $parts[1].Trim()
-        if ($cfg.ContainsKey($key)) { $cfg[$key] = $val }
+        $k = $parts[0].Trim(); $v = $parts[1].Trim()
+        if ($cfg.ContainsKey($k)) { $cfg[$k] = $v }
     }
 }
+if ($Host -ne "") { $cfg["HOST"] = $Host }
+if ($Port -ne 0)  { $cfg["PORT"] = $Port.ToString() }
 
-# 命令列參數覆蓋設定檔
-if ($Host -ne "")  { $cfg["HOST"] = $Host }
-if ($Port -ne 0)   { $cfg["PORT"] = $Port.ToString() }
-
-# ─── 尋找 llama-server ────────────────────────────────────────
+# --- find llama-server ---
 function Find-LlamaServer {
-    $candidates = @(
+    $paths = @(
         "llama-server.exe",
         (Join-Path $RootDir "llama.cpp\llama-server.exe"),
         (Join-Path $RootDir "llama.cpp\build\bin\Release\llama-server.exe"),
@@ -64,196 +55,172 @@ function Find-LlamaServer {
         "C:\llama.cpp\build\bin\Release\llama-server.exe",
         (Join-Path $env:LOCALAPPDATA "llama.cpp\llama-server.exe")
     )
-
-    foreach ($c in $candidates) {
-        if (Test-Path $c) { return $c }
-    }
-
-    $fromPath = Get-Command "llama-server.exe" -ErrorAction SilentlyContinue
-    if ($fromPath) { return $fromPath.Source }
-
+    foreach ($p in $paths) { if (Test-Path $p) { return $p } }
+    $cmd = Get-Command "llama-server.exe" -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
     return $null
 }
 
 function Show-InstallGuide {
     Write-Host ""
-    Write-Host "找不到 llama-server.exe，請選擇安裝方式:" -ForegroundColor Yellow
+    Write-Host "  llama-server.exe not found. Install options:" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  [方法 1] 下載預編譯版本 (推薦):" -ForegroundColor Cyan
-    Write-Host "    1. 前往 https://github.com/ggerganov/llama.cpp/releases"
-    Write-Host "    2. 下載 llama-b????-bin-win-cuda12-x64.zip  (NVIDIA GPU)"
-    Write-Host "       或   llama-b????-bin-win-noavx-x64.zip   (純 CPU)"
-    Write-Host "    3. 解壓至 $RootDir\llama.cpp\"
+    Write-Host "  [1] Pre-built release (recommended):" -ForegroundColor Cyan
+    Write-Host "      https://github.com/ggerganov/llama.cpp/releases"
+    Write-Host "      -> llama-b????-bin-win-cuda12-x64.zip  (NVIDIA GPU)"
+    Write-Host "      -> llama-b????-bin-win-noavx-x64.zip   (CPU only)"
+    Write-Host "      Extract to: $RootDir\llama.cpp\"
     Write-Host ""
-    Write-Host "  [方法 2] 自行編譯 (需要 CMake + Visual Studio):" -ForegroundColor Cyan
-    Write-Host "    git clone https://github.com/ggerganov/llama.cpp"
-    Write-Host "    cd llama.cpp"
-    Write-Host "    cmake -B build -DGGML_CUDA=ON"
-    Write-Host "    cmake --build build --config Release"
+    Write-Host "  [2] Build from source (requires CMake + Visual Studio):" -ForegroundColor Cyan
+    Write-Host "      git clone https://github.com/ggerganov/llama.cpp"
+    Write-Host "      cd llama.cpp"
+    Write-Host "      cmake -B build -DGGML_CUDA=ON"
+    Write-Host "      cmake --build build --config Release"
     Write-Host ""
-    Write-Host "  [方法 3] pip 安裝 Python 版本:" -ForegroundColor Cyan
-    Write-Host "    pip install llama-cpp-python[server]"
-    Write-Host "    python -m llama_cpp.server --model <model_path>"
+    Write-Host "  [3] Python package:" -ForegroundColor Cyan
+    Write-Host "      pip install llama-cpp-python[server]"
+    Write-Host "      python -m llama_cpp.server --model <path>"
     Write-Host ""
 }
 
-# ─── 偵測 GPU ─────────────────────────────────────────────────
+# --- detect GPU ---
 function Get-GpuInfo {
     try {
-        $gpu = (Get-WmiObject -Class Win32_VideoController -ErrorAction SilentlyContinue |
+        $gpu = (Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
                 Where-Object { $_.Name -notmatch "Microsoft|Basic" } |
                 Select-Object -First 1).Name
         if ($gpu) { return $gpu }
     } catch {}
-    return "未偵測到 GPU (純 CPU 模式)"
+    return "No discrete GPU detected (CPU mode)"
 }
 
-# ─── 選擇模型 ─────────────────────────────────────────────────
+# --- select model ---
 function Select-Model {
     $files = @(Get-ChildItem -Path $ModelsDir -Filter "*.gguf" -File | Sort-Object Name)
-
     if ($files.Count -eq 0) {
-        Write-Err "models 目錄中沒有 .gguf 檔案"
-        Write-Info "請先執行 .\download.ps1 下載模型"
-        Read-Host "按 Enter 結束"
-        exit 1
+        err "No .gguf files in models directory."
+        info "Run .\download.ps1 first."
+        Read-Host "Press Enter to exit"; exit 1
     }
 
-    Write-Host ""
-    Write-Host "=== 選擇要啟動的模型 ===" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host ""; Write-Host "=== Select Model ===" -ForegroundColor Cyan; Write-Host ""
     for ($i = 0; $i -lt $files.Count; $i++) {
-        $sizeMB = [math]::Round($files[$i].Length / 1MB, 1)
-        Write-Host ("  [{0}] {1,-55} ({2} MB)" -f ($i+1), $files[$i].Name, $sizeMB)
+        $mb = [math]::Round($files[$i].Length / 1MB, 1)
+        Write-Host ("  [{0}] {1,-55} ({2} MB)" -f ($i+1), $files[$i].Name, $mb)
     }
     Write-Host ""
-    $num = Read-Host "請選擇模型編號"
-    $idx = [int]$num - 1
-    if ($idx -lt 0 -or $idx -ge $files.Count) {
-        Write-Err "無效的模型編號"
-        exit 1
-    }
+    $n = Read-Host "Select number"
+    $idx = [int]$n - 1
+    if ($idx -lt 0 -or $idx -ge $files.Count) { err "Invalid number"; exit 1 }
     return $files[$idx].FullName
 }
 
-# ─── 互動式參數設定 ───────────────────────────────────────────
+# --- configure params ---
 function Set-Params {
-    Write-Host ""
-    Write-Host "=== 啟動參數設定 (按 Enter 使用預設值) ===" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host ""; Write-Host "=== Server Parameters (Enter = keep default) ===" -ForegroundColor Cyan; Write-Host ""
 
-    $v = Read-Host ("  服務位址        [{0}]" -f $cfg["HOST"])
+    $v = Read-Host ("  Host          [{0}]" -f $cfg["HOST"])
     if ($v) { $cfg["HOST"] = $v }
 
-    $v = Read-Host ("  服務埠號        [{0}]" -f $cfg["PORT"])
+    $v = Read-Host ("  Port          [{0}]" -f $cfg["PORT"])
     if ($v) { $cfg["PORT"] = $v }
 
-    $v = Read-Host ("  上下文長度      [{0}] (8192-131072)" -f $cfg["CTX_SIZE"])
+    $v = Read-Host ("  Context size  [{0}] (8192-131072)" -f $cfg["CTX_SIZE"])
     if ($v) { $cfg["CTX_SIZE"] = $v }
 
-    $v = Read-Host ("  GPU 層數        [{0}] (0=純CPU, -1=全GPU)" -f $cfg["N_GPU_LAYERS"])
+    $v = Read-Host ("  GPU layers    [{0}] (0=CPU only, -1=all GPU)" -f $cfg["N_GPU_LAYERS"])
     if ($v) { $cfg["N_GPU_LAYERS"] = $v }
 
-    $v = Read-Host ("  CPU 執行緒數    [{0}]" -f $cfg["N_THREADS"])
+    $v = Read-Host ("  CPU threads   [{0}]" -f $cfg["N_THREADS"])
     if ($v) { $cfg["N_THREADS"] = $v }
 
-    $v = Read-Host ("  平行處理槽數    [{0}]" -f $cfg["N_PARALLEL"])
+    $v = Read-Host ("  Parallel slots[{0}]" -f $cfg["N_PARALLEL"])
     if ($v) { $cfg["N_PARALLEL"] = $v }
 }
 
-# ─── 啟動服務 ─────────────────────────────────────────────────
-function Start-LlamaServer ($llamaServer, $modelPath) {
+# --- start server ---
+function Start-Server ($bin, $modelPath) {
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "  啟動設定摘要" -ForegroundColor White
+    Write-Host "  Launch Summary" -ForegroundColor White
     Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host ("  {0,-14} {1}" -f "模型:", (Split-Path -Leaf $modelPath))
-    Write-Host ("  {0,-14} " -f "API 位址:") -NoNewline
-    Write-Host ("http://{0}:{1}" -f $cfg["HOST"], $cfg["PORT"]) -ForegroundColor Green
-    Write-Host ("  {0,-14} {1} tokens" -f "上下文:", $cfg["CTX_SIZE"])
-    Write-Host ("  {0,-14} {1}" -f "GPU 層數:", $cfg["N_GPU_LAYERS"])
-    Write-Host ("  {0,-14} {1}" -f "執行緒:", $cfg["N_THREADS"])
-    Write-Host ("  {0,-14} {1}" -f "平行槽數:", $cfg["N_PARALLEL"])
+    Write-Host ("  Model   : {0}" -f (Split-Path -Leaf $modelPath))
+    Write-Host ("  API URL : http://{0}:{1}" -f $cfg["HOST"], $cfg["PORT"]) -ForegroundColor Green
+    Write-Host ("  Context : {0} tokens" -f $cfg["CTX_SIZE"])
+    Write-Host ("  GPU lyr : {0}" -f $cfg["N_GPU_LAYERS"])
+    Write-Host ("  Threads : {0}" -f $cfg["N_THREADS"])
+    Write-Host ("  Parallel: {0}" -f $cfg["N_PARALLEL"])
     Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "  API 端點:" -ForegroundColor White
-    Write-Host ("    聊天:   http://{0}:{1}/v1/chat/completions" -f $cfg["HOST"], $cfg["PORT"]) -ForegroundColor Cyan
-    Write-Host ("    補全:   http://{0}:{1}/v1/completions"      -f $cfg["HOST"], $cfg["PORT"]) -ForegroundColor Cyan
-    Write-Host ("    健康:   http://{0}:{1}/health"              -f $cfg["HOST"], $cfg["PORT"]) -ForegroundColor Cyan
-    Write-Host ("    Web UI: http://{0}:{1}"                     -f $cfg["HOST"], $cfg["PORT"]) -ForegroundColor Cyan
+    Write-Host ("  Chat  : http://{0}:{1}/v1/chat/completions" -f $cfg["HOST"], $cfg["PORT"]) -ForegroundColor Cyan
+    Write-Host ("  Health: http://{0}:{1}/health"              -f $cfg["HOST"], $cfg["PORT"]) -ForegroundColor Cyan
+    Write-Host ("  Web UI: http://{0}:{1}"                     -f $cfg["HOST"], $cfg["PORT"]) -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host ""
 
-    $confirm = Read-Host "確認啟動服務? (Y/n)"
-    if ($confirm.ToLower() -eq "n") { exit 0 }
+    $c = Read-Host "Start server? (Y/n)"
+    if ($c -eq "n") { exit 0 }
 
-    Write-Host ""
-    Write-Info "正在啟動 llama-server..."
-    Write-Host "  按 Ctrl+C 停止服務" -ForegroundColor Yellow
-    Write-Host ""
+    Write-Host ""; info "Starting llama-server...  Press Ctrl+C to stop"; Write-Host ""
 
-    $argList = @(
-        "--model",          $modelPath,
-        "--host",           $cfg["HOST"],
-        "--port",           $cfg["PORT"],
-        "--ctx-size",       $cfg["CTX_SIZE"],
-        "--n-gpu-layers",   $cfg["N_GPU_LAYERS"],
-        "--threads",        $cfg["N_THREADS"],
-        "--parallel",       $cfg["N_PARALLEL"],
-        "--batch-size",     $cfg["BATCH_SIZE"],
-        "--temp",           $cfg["TEMPERATURE"],
-        "--repeat-penalty", $cfg["REPEAT_PENALTY"],
-        "--top-k",          $cfg["TOP_K"],
-        "--top-p",          $cfg["TOP_P"],
-        "--min-p",          $cfg["MIN_P"],
-        "--flash-attn",
-        "--metrics",
-        "--log-format",     "text"
-    )
-
-    & $llamaServer @argList
+    & $bin `
+        --model         $modelPath `
+        --host          $cfg["HOST"] `
+        --port          $cfg["PORT"] `
+        --ctx-size      $cfg["CTX_SIZE"] `
+        --n-gpu-layers  $cfg["N_GPU_LAYERS"] `
+        --threads       $cfg["N_THREADS"] `
+        --parallel      $cfg["N_PARALLEL"] `
+        --batch-size    $cfg["BATCH_SIZE"] `
+        --temp          $cfg["TEMPERATURE"] `
+        --repeat-penalty $cfg["REPEAT_PENALTY"] `
+        --top-k         $cfg["TOP_K"] `
+        --top-p         $cfg["TOP_P"] `
+        --min-p         $cfg["MIN_P"] `
+        --flash-attn `
+        --metrics `
+        --log-format    text
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
-        Write-Err "llama-server 異常退出，錯誤碼: $LASTEXITCODE"
-        Write-Host ""
-        Write-Host "常見問題排查:" -ForegroundColor Yellow
-        Write-Host "  - 記憶體不足:   降低 --ctx-size 或 --n-gpu-layers"
-        Write-Host "  - 埠號衝突:     更換 PORT 設定"
-        Write-Host "  - 模型檔案損壞: 重新執行 .\download.ps1"
-        Write-Host "  - GPU 驅動問題: 設定 N_GPU_LAYERS=0 改用 CPU"
-        Read-Host "按 Enter 結束"
+        err "llama-server exited with code $LASTEXITCODE"
+        Write-Host "  Troubleshooting:" -ForegroundColor Yellow
+        Write-Host "    - Out of memory  : lower --ctx-size or --n-gpu-layers"
+        Write-Host "    - Port in use    : change PORT in config\settings.ini"
+        Write-Host "    - Corrupt model  : re-run .\download.ps1"
+        Write-Host "    - GPU error      : set N_GPU_LAYERS=0 in settings.ini"
+        Read-Host "Press Enter to exit"
     }
 }
 
-# ─── 主程式 ───────────────────────────────────────────────────
+# --- main ---
 Clear-Host
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  GPT-OSS 20B 模型服務啟動工具" -ForegroundColor White
+Write-Host "  GPT-OSS 20B Model Server" -ForegroundColor White
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 
-Write-Info "GPU 偵測: $(Get-GpuInfo)"
+info "GPU: $(Get-GpuInfo)"
 
-$llamaServer = Find-LlamaServer
-if (-not $llamaServer) {
-    Write-Err "找不到 llama-server.exe!"
+$bin = Find-LlamaServer
+if (-not $bin) {
+    err "llama-server.exe not found!"
     Show-InstallGuide
-    $manual = Read-Host "請手動輸入 llama-server.exe 路徑 (或按 Enter 結束)"
-    if ([string]::IsNullOrWhiteSpace($manual)) { exit 1 }
-    if (-not (Test-Path $manual)) { Write-Err "路徑不存在: $manual"; exit 1 }
-    $llamaServer = $manual
+    $manual = Read-Host "Enter full path to llama-server.exe (or Enter to exit)"
+    if ([string]::IsNullOrWhiteSpace($manual) -or -not (Test-Path $manual)) {
+        if ($manual) { err "Path not found: $manual" }
+        exit 1
+    }
+    $bin = $manual
 }
+info "llama-server: $bin"
 
-Write-Info "llama-server 路徑: $llamaServer"
-
-# 命令列快速模式: .\serve.ps1 -Model "model.gguf" -Port 8080
 if ($Model -ne "" -and (Test-Path $Model)) {
     $selectedModel = (Resolve-Path $Model).Path
-    Write-Info "命令列模式: $(Split-Path -Leaf $selectedModel)"
+    info "CLI mode: $(Split-Path -Leaf $selectedModel)"
 } else {
     $selectedModel = Select-Model
     Set-Params
 }
 
-Start-LlamaServer $llamaServer $selectedModel
+Start-Server $bin $selectedModel

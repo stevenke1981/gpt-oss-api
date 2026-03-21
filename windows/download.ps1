@@ -1,227 +1,189 @@
-# ============================================================
-# GPT-OSS 20B 模型下載腳本 (Windows PowerShell)
-# 用途: 從 HuggingFace 下載指定的 GGUF 模型檔案
-# 執行: .\download.ps1
-# ============================================================
+# GPT-OSS 20B Model Downloader (Windows PowerShell)
+# Usage: .\download.ps1
+# Direct: .\download.ps1 "OpenAI-20B-NEOPlus-Uncensored-Q8_0.gguf"
 
-$ErrorActionPreference = "Stop"
-$OutputEncoding = [System.Text.Encoding]::UTF8
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+param([string]$FileName = "")
 
-$ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RootDir    = Split-Path -Parent $ScriptDir
-$ModelsDir  = Join-Path $RootDir "models"
-$HF_REPO    = "DavidAU/OpenAi-GPT-oss-20b-abliterated-uncensored-NEO-Imatrix-gguf"
-$HF_BASE    = "https://huggingface.co/$HF_REPO/resolve/main"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RootDir   = Split-Path -Parent $ScriptDir
+$ModelsDir = Join-Path $RootDir "models"
+$HF_REPO   = "DavidAU/OpenAi-GPT-oss-20b-abliterated-uncensored-NEO-Imatrix-gguf"
+$HF_BASE   = "https://huggingface.co/$HF_REPO/resolve/main"
 
-# ─── 工具函數 ─────────────────────────────────────────────────
-function Write-Info    ($msg) { Write-Host "[資訊] $msg" -ForegroundColor Cyan }
-function Write-Success ($msg) { Write-Host "[成功] $msg" -ForegroundColor Green }
-function Write-Warn    ($msg) { Write-Host "[警告] $msg" -ForegroundColor Yellow }
-function Write-Err     ($msg) { Write-Host "[錯誤] $msg" -ForegroundColor Red }
+function info  ($m) { Write-Host "[INFO]    $m" -ForegroundColor Cyan }
+function ok    ($m) { Write-Host "[OK]      $m" -ForegroundColor Green }
+function warn  ($m) { Write-Host "[WARN]    $m" -ForegroundColor Yellow }
+function err   ($m) { Write-Host "[ERROR]   $m" -ForegroundColor Red }
 
-function Show-Header {
-    Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "  GPT-OSS 20B 模型下載工具" -ForegroundColor White
-    Write-Host "  Repository: $HF_REPO" -ForegroundColor DarkGray
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host ""
-}
+if (-not (Test-Path $ModelsDir)) { New-Item -ItemType Directory -Path $ModelsDir | Out-Null }
 
-# ─── 偵測下載工具 ─────────────────────────────────────────────
+# --- detect downloader ---
 function Get-Downloader {
     if (Get-Command "huggingface-cli" -ErrorAction SilentlyContinue) { return "hf-cli" }
     if (Get-Command "python" -ErrorAction SilentlyContinue) {
-        $ok = python -c "import huggingface_hub" 2>$null
+        python -c "import huggingface_hub" 2>$null
         if ($LASTEXITCODE -eq 0) { return "python" }
     }
     if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) { return "curl" }
-    if (Get-Command "wget" -ErrorAction SilentlyContinue) { return "wget" }
-    return $null
+    return "builtin"
 }
 
-# ─── 模型資料 ─────────────────────────────────────────────────
-$Models = @{
-    "IQ4_NL" = @(
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-Uncensored2-IQ4_NL.gguf";           Desc = "標準" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEOPlus-Uncensored-IQ4_NL.gguf";        Desc = "增強版" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-CODEPlus16-Uncensored-IQ4_NL.gguf"; Desc = "程式碼加強" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-HRRPlus-Uncensored-IQ4_NL.gguf";   Desc = "DI-Matrix" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-CODEPlus-Uncensored-IQ4_NL.gguf";  Desc = "DI-Matrix 程式碼" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-CODE2-Plus-Uncensored-IQ4_NL.gguf"; Desc = "程式碼 v2" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-HRR-CODE-TRI-Uncensored-IQ4_NL.gguf"; Desc = "TRI-Matrix" }
-    )
-    "Q5_1" = @(
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-Uncensored2-Q5_1.gguf";             Desc = "標準" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEOPlus-Uncensored-Q5_1.gguf";          Desc = "增強版" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-CODEPlus-Uncensored-Q5_1.gguf";    Desc = "程式碼" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-HRR-CODE-TRI-Uncensored-Q5_1.gguf";Desc = "TRI-Matrix" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-HRR-DI-Uncensored-Q5_1.gguf";      Desc = "DI-Matrix" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-CODE-DI-Uncensored-Q5_1.gguf";     Desc = "DI-Matrix 程式碼" }
-    )
-    "Q8_0" = @(
-        [PSCustomObject]@{ File = "OpenAI-20B-NEOPlus-Uncensored-Q8_0.gguf";          Desc = "增強版" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-HRR-CODE-TRI-Uncensored-Q8_0.gguf";Desc = "TRI-Matrix" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-HRR-CODE-5-TRI-Uncensored-Q8_0.gguf"; Desc = "TRI-Matrix v5" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-HRR-DI-Uncensored-Q8_0.gguf";      Desc = "DI-Matrix" }
-        [PSCustomObject]@{ File = "OpenAI-20B-NEO-CODE-DI-Uncensored-Q8_0.gguf";     Desc = "DI-Matrix 程式碼" }
-    )
-}
+# --- model list ---
+$IQ4 = @(
+    @{ f="OpenAI-20B-NEO-Uncensored2-IQ4_NL.gguf";            d="Standard" }
+    @{ f="OpenAI-20B-NEOPlus-Uncensored-IQ4_NL.gguf";         d="Plus" }
+    @{ f="OpenAI-20B-NEO-CODEPlus16-Uncensored-IQ4_NL.gguf";  d="Code+" }
+    @{ f="OpenAI-20B-NEO-HRRPlus-Uncensored-IQ4_NL.gguf";     d="DI-Matrix" }
+    @{ f="OpenAI-20B-NEO-CODEPlus-Uncensored-IQ4_NL.gguf";    d="DI-Matrix Code" }
+    @{ f="OpenAI-20B-NEO-CODE2-Plus-Uncensored-IQ4_NL.gguf";  d="Code v2" }
+    @{ f="OpenAI-20B-NEO-HRR-CODE-TRI-Uncensored-IQ4_NL.gguf";d="TRI-Matrix" }
+)
+$Q51 = @(
+    @{ f="OpenAI-20B-NEO-Uncensored2-Q5_1.gguf";              d="Standard" }
+    @{ f="OpenAI-20B-NEOPlus-Uncensored-Q5_1.gguf";           d="Plus" }
+    @{ f="OpenAI-20B-NEO-CODEPlus-Uncensored-Q5_1.gguf";      d="Code+" }
+    @{ f="OpenAI-20B-NEO-HRR-CODE-TRI-Uncensored-Q5_1.gguf";  d="TRI-Matrix" }
+    @{ f="OpenAI-20B-NEO-HRR-DI-Uncensored-Q5_1.gguf";        d="DI-Matrix" }
+    @{ f="OpenAI-20B-NEO-CODE-DI-Uncensored-Q5_1.gguf";       d="DI-Matrix Code" }
+)
+$Q80 = @(
+    @{ f="OpenAI-20B-NEOPlus-Uncensored-Q8_0.gguf";              d="Plus" }
+    @{ f="OpenAI-20B-NEO-HRR-CODE-TRI-Uncensored-Q8_0.gguf";     d="TRI-Matrix" }
+    @{ f="OpenAI-20B-NEO-HRR-CODE-5-TRI-Uncensored-Q8_0.gguf";   d="TRI-Matrix v5" }
+    @{ f="OpenAI-20B-NEO-HRR-DI-Uncensored-Q8_0.gguf";           d="DI-Matrix" }
+    @{ f="OpenAI-20B-NEO-CODE-DI-Uncensored-Q8_0.gguf";          d="DI-Matrix Code" }
+)
 
-# ─── 選擇模型 ─────────────────────────────────────────────────
-function Select-Model {
-    Write-Host "請選擇量化類型:" -ForegroundColor White
+function Show-SubMenu ($title, $sizeHint, $list) {
     Write-Host ""
-    Write-Host "  [1] IQ4_NL  - 約 12GB  | 創意/娛樂用途 (Imatrix 最強效果)" -ForegroundColor Yellow
-    Write-Host "  [2] Q5_1    - 約 16GB  | 均衡/一般用途 (穩定性佳)"          -ForegroundColor Green
-    Write-Host "  [3] Q8_0    - 約 22GB  | 最高品質      (檔案最大)"          -ForegroundColor Magenta
-    Write-Host "  [4] 手動輸入檔名"
-    Write-Host "  [0] 結束"
-    Write-Host ""
-    $choice = Read-Host "請輸入選項 (0-4)"
-
-    switch ($choice) {
-        "0" { exit 0 }
-        "1" { return Select-FromList "IQ4_NL" "約 12GB" $Models["IQ4_NL"] }
-        "2" { return Select-FromList "Q5_1"   "約 16GB" $Models["Q5_1"] }
-        "3" { return Select-FromList "Q8_0"   "約 22GB" $Models["Q8_0"] }
-        "4" {
-            $file = Read-Host "請輸入完整檔名 (例: OpenAI-20B-NEOPlus-Uncensored-Q8_0.gguf)"
-            if ([string]::IsNullOrWhiteSpace($file)) { Write-Err "檔名不能為空"; exit 1 }
-            return $file
-        }
-        default { Write-Err "無效選項"; exit 1 }
-    }
-}
-
-function Select-FromList ($quantType, $sizeHint, $list) {
-    Write-Host ""
-    Write-Host "=== $quantType 模型清單 ($sizeHint) ===" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host "=== $title ($sizeHint) ===" -ForegroundColor Cyan
     for ($i = 0; $i -lt $list.Count; $i++) {
-        Write-Host ("  [{0}] {1,-55} ({2})" -f ($i+1), $list[$i].File, $list[$i].Desc)
+        Write-Host ("  [{0}] {1,-55} ({2})" -f ($i+1), $list[$i].f, $list[$i].d)
     }
-    Write-Host "  [0] 返回"
+    Write-Host "  [0] Back"
     Write-Host ""
-    $idx = Read-Host "請選擇模型 (0-$($list.Count))"
-
-    if ($idx -eq "0") { return Select-Model }
-    $n = [int]$idx - 1
-    if ($n -lt 0 -or $n -ge $list.Count) { Write-Err "無效選項"; exit 1 }
-    return $list[$n].File
+    $n = Read-Host "Select"
+    if ($n -eq "0") { return "" }
+    $idx = [int]$n - 1
+    if ($idx -lt 0 -or $idx -ge $list.Count) { err "Invalid selection"; exit 1 }
+    return $list[$idx].f
 }
 
-# ─── 下載進度回調 ─────────────────────────────────────────────
-function Invoke-Download ($modelFile, $destPath, $downloader) {
-    $url = "$HF_BASE/$modelFile"
-
+function Select-Model {
     Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "  準備下載:"
-    Write-Host "    檔案: $modelFile" -ForegroundColor White
-    Write-Host "    目標: $destPath"  -ForegroundColor DarkGray
-    Write-Host "    來源: $url"       -ForegroundColor DarkGray
-    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "Select quantization type:" -ForegroundColor White
+    Write-Host "  [1] IQ4_NL  ~12GB  Creative / general (strongest Imatrix)" -ForegroundColor Yellow
+    Write-Host "  [2] Q5_1    ~16GB  Balanced (more stable)"                 -ForegroundColor Green
+    Write-Host "  [3] Q8_0    ~22GB  Highest quality (largest file)"         -ForegroundColor Magenta
+    Write-Host "  [4] Enter filename manually"
+    Write-Host "  [0] Exit"
     Write-Host ""
-
-    # 檢查是否已存在
-    if (Test-Path $destPath) {
-        $existSize = [math]::Round((Get-Item $destPath).Length / 1MB)
-        Write-Warn "檔案已存在 (${existSize} MB): $destPath"
-        $overwrite = Read-Host "是否重新下載? (y/N)"
-        if ($overwrite.ToLower() -ne "y") {
-            Write-Info "取消下載"
-            return
+    $c = Read-Host "Choice"
+    switch ($c) {
+        "0" { exit 0 }
+        "1" { return Show-SubMenu "IQ4_NL" "~12 GB" $IQ4 }
+        "2" { return Show-SubMenu "Q5_1"   "~16 GB" $Q51 }
+        "3" { return Show-SubMenu "Q8_0"   "~22 GB" $Q80 }
+        "4" {
+            $f = Read-Host "Filename (e.g. OpenAI-20B-NEOPlus-Uncensored-Q8_0.gguf)"
+            if ([string]::IsNullOrWhiteSpace($f)) { err "Filename required"; exit 1 }
+            return $f
         }
-        Remove-Item $destPath -Force
+        default { err "Invalid choice"; exit 1 }
+    }
+}
+
+function Start-Download ($modelFile) {
+    $dest = Join-Path $ModelsDir $modelFile
+    $url  = "$HF_BASE/$modelFile"
+    $dl   = Get-Downloader
+
+    Write-Host ""
+    Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "  File   : $modelFile"
+    Write-Host "  Dest   : $dest" -ForegroundColor DarkGray
+    Write-Host "  Source : $url"  -ForegroundColor DarkGray
+    Write-Host "  Tool   : $dl"   -ForegroundColor DarkGray
+    Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host ""
+
+    if (Test-Path $dest) {
+        $mb = [math]::Round((Get-Item $dest).Length / 1MB)
+        warn "File already exists (${mb} MB)"
+        $ow = Read-Host "Re-download? (y/N)"
+        if ($ow -ne "y") { info "Cancelled"; return }
+        Remove-Item $dest -Force
     }
 
-    Write-Info "使用下載工具: $downloader"
+    info "Downloading via $dl ..."
 
-    switch ($downloader) {
+    switch ($dl) {
         "hf-cli" {
-            Write-Info "使用 huggingface-cli 下載..."
-            & huggingface-cli download $HF_REPO $modelFile `
-                --local-dir $ModelsDir `
-                --local-dir-use-symlinks False
+            huggingface-cli download $HF_REPO $modelFile `
+                --local-dir $ModelsDir --local-dir-use-symlinks False
         }
         "python" {
-            Write-Info "使用 Python huggingface_hub 下載..."
-            $script = @"
-from huggingface_hub import hf_hub_download
-hf_hub_download(repo_id='$HF_REPO', filename='$modelFile', local_dir=r'$ModelsDir', local_dir_use_symlinks=False)
-"@
-            python -c $script
+            $py = "from huggingface_hub import hf_hub_download; " +
+                  "hf_hub_download(repo_id='$HF_REPO', filename='$modelFile', " +
+                  "local_dir=r'$ModelsDir', local_dir_use_symlinks=False)"
+            python -c $py
         }
         "curl" {
-            Write-Info "使用 curl 下載..."
-            Write-Warn "curl 不支援斷點續傳，建議安裝: pip install huggingface_hub[cli]"
-            $headers = @{ "User-Agent" = "Mozilla/5.0" }
             $token = $env:HF_TOKEN
-            if ($token) { $headers["Authorization"] = "Bearer $token" }
-            Invoke-WebRequest -Uri $url -OutFile $destPath -Headers $headers `
-                -UseBasicParsing
-        }
-        "wget" {
-            Write-Info "使用 wget 下載..."
-            wget -c $url -O $destPath --show-progress
+            if ($token) {
+                curl.exe -L --progress-bar -H "Authorization: Bearer $token" "$url" -o "$dest"
+            } else {
+                curl.exe -L --progress-bar "$url" -o "$dest"
+            }
         }
         default {
-            # PowerShell 內建 (最慢，無進度)
-            Write-Info "使用 PowerShell Invoke-WebRequest 下載..."
-            Write-Warn "無進度顯示，建議安裝: pip install huggingface_hub[cli]"
-            $ProgressPreference = "Continue"
-            Invoke-WebRequest -Uri $url -OutFile $destPath -UseBasicParsing
+            info "Using PowerShell Invoke-WebRequest (no progress bar)"
+            warn "For better experience: pip install huggingface_hub[cli]"
+            $hdrs = @{}
+            if ($env:HF_TOKEN) { $hdrs["Authorization"] = "Bearer $env:HF_TOKEN" }
+            Invoke-WebRequest -Uri $url -OutFile $dest -Headers $hdrs -UseBasicParsing
         }
     }
 
-    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-        Write-Err "下載失敗! 錯誤碼: $LASTEXITCODE"
-        Write-Info "若需要認證請設定: `$env:HF_TOKEN = 'your_token'"
-        exit 1
-    }
-
-    if (Test-Path $destPath) {
-        $sizeMB = [math]::Round((Get-Item $destPath).Length / 1MB)
+    if (Test-Path $dest) {
+        $mb = [math]::Round((Get-Item $dest).Length / 1MB)
         Write-Host ""
-        Write-Success "模型下載完成!"
-        Write-Host "  路徑: $destPath"    -ForegroundColor Cyan
-        Write-Host "  大小: ${sizeMB} MB" -ForegroundColor Cyan
-        Write-Host ""
-        Write-Host "  [提示] 可執行 .\serve.ps1 啟動模型服務" -ForegroundColor Yellow
+        ok "Download complete: $modelFile (${mb} MB)"
+        info "Run .\serve.ps1 to start the API server"
     } else {
-        Write-Err "下載後找不到檔案: $destPath"
+        err "File not found after download: $dest"
+        info "Set HF_TOKEN if the repo requires authentication: `$env:HF_TOKEN = 'hf_...'"
         exit 1
     }
 }
 
-# ─── 主程式 ───────────────────────────────────────────────────
-Show-Header
-
-# 建立 models 目錄
-if (-not (Test-Path $ModelsDir)) { New-Item -ItemType Directory -Path $ModelsDir | Out-Null }
-
-$downloader = Get-Downloader
-if ($downloader) {
-    Write-Info "偵測到下載工具: $downloader"
-} else {
-    Write-Warn "未找到推薦下載工具，將使用 PowerShell 內建方式 (無進度顯示)"
-    Write-Host "  建議安裝: pip install huggingface_hub[cli]" -ForegroundColor DarkGray
-    $downloader = "builtin"
-}
+# --- main ---
+Clear-Host
 Write-Host ""
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "  GPT-OSS 20B Model Downloader" -ForegroundColor White
+Write-Host "  Repo: $HF_REPO" -ForegroundColor DarkGray
+Write-Host "============================================================" -ForegroundColor Cyan
 
-# 支援命令列直接指定: .\download.ps1 OpenAI-20B-NEOPlus-Uncensored-Q8_0.gguf
-if ($args.Count -ge 1) {
-    $modelFile = $args[0]
-    Write-Info "命令列模式，直接下載: $modelFile"
-} else {
-    $modelFile = Select-Model
+$dl = Get-Downloader
+info "Downloader: $dl"
+if ($dl -eq "builtin") {
+    warn "huggingface-cli not found. Install for best experience:"
+    Write-Host "  pip install huggingface_hub[cli]" -ForegroundColor DarkGray
 }
 
-$destPath = Join-Path $ModelsDir $modelFile
-Invoke-Download $modelFile $destPath $downloader
+if ($FileName -ne "") {
+    $selected = $FileName
+} else {
+    $selected = Select-Model
+}
+
+if ([string]::IsNullOrWhiteSpace($selected)) {
+    info "No model selected. Exiting."
+    exit 0
+}
+
+Start-Download $selected
 
 Write-Host ""
-Read-Host "按 Enter 結束"
+Read-Host "Press Enter to exit"
