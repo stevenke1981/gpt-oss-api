@@ -1,0 +1,16 @@
+# 模型檔案 (體積太大)
+models/
+*.gguf
+
+# Claude Code 本地設定
+.claude/
+
+# 系統檔案
+.DS_Store
+Thumbs.db
+
+# 暫存檔
+*.tmp
+*.part
+*.download
+*.incomplete
