@@ -248,6 +248,7 @@ start_server() {
         --top-k         "$TOP_K"
         --top-p         "$TOP_P"
         --min-p         "$MIN_P"
+        --jinja \
         --metrics
     )
 

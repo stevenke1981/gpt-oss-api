@@ -176,6 +176,7 @@ function Start-Server ($bin, $modelPath) {
         --top-k         $cfg["TOP_K"] `
         --top-p         $cfg["TOP_P"] `
         --min-p         $cfg["MIN_P"] `
+        --jinja `
         --metrics
 
     if ($LASTEXITCODE -ne 0) {
