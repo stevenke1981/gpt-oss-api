@@ -20,19 +20,23 @@ function err   ($m) { Write-Host "[ERROR]   $m" -ForegroundColor Red }
 
 # --- load config ---
 $cfg = @{
-    HOST           = "127.0.0.1"
-    PORT           = "8080"
-    N_GPU_LAYERS   = "0"
-    N_THREADS      = ([System.Environment]::ProcessorCount).ToString()
-    CTX_SIZE       = "8192"
-    N_PARALLEL     = "4"
-    BATCH_SIZE     = "512"
-    TEMPERATURE    = "0.8"
-    REPEAT_PENALTY = "1.1"
-    TOP_K          = "40"
-    TOP_P          = "0.95"
-    MIN_P          = "0.05"
-    ENABLE_JINJA   = "false"
+    HOST                = "127.0.0.1"
+    PORT                = "8080"
+    N_GPU_LAYERS        = "0"
+    N_THREADS           = ([System.Environment]::ProcessorCount).ToString()
+    CTX_SIZE            = "8192"
+    N_PARALLEL          = "4"
+    BATCH_SIZE          = "512"
+    TEMPERATURE         = "0.8"
+    REPEAT_PENALTY      = "1.1"
+    TOP_K               = "40"
+    TOP_P               = "0.95"
+    MIN_P               = "0.05"
+    ENABLE_JINJA        = "false"
+    CACHE_TYPE_K        = "q8_0"
+    CACHE_TYPE_V        = "q8_0"
+    DEFRAG_THOLD        = "0.1"
+    DISABLE_FLASH_ATTN  = "false"
 }
 
 if (Test-Path $ConfigFile) {
@@ -163,23 +167,29 @@ function Start-Server ($bin, $modelPath) {
 
     Write-Host ""; info "Starting llama-server...  Press Ctrl+C to stop"; Write-Host ""
 
-    & $bin `
-        --model         $modelPath `
-        --host          $cfg["HOST"] `
-        --port          $cfg["PORT"] `
-        --ctx-size      $cfg["CTX_SIZE"] `
-        --n-gpu-layers  $cfg["N_GPU_LAYERS"] `
-        --threads       $cfg["N_THREADS"] `
-        --parallel      $cfg["N_PARALLEL"] `
-        --batch-size    $cfg["BATCH_SIZE"] `
-        --temp          $cfg["TEMPERATURE"] `
-        --repeat-penalty $cfg["REPEAT_PENALTY"] `
-        --top-k         $cfg["TOP_K"] `
-        --top-p         $cfg["TOP_P"] `
-        --min-p         $cfg["MIN_P"] `
-        --metrics
+    $argList = @(
+        "--model",         $modelPath,
+        "--host",          $cfg["HOST"],
+        "--port",          $cfg["PORT"],
+        "--ctx-size",      $cfg["CTX_SIZE"],
+        "--n-gpu-layers",  $cfg["N_GPU_LAYERS"],
+        "--threads",       $cfg["N_THREADS"],
+        "--parallel",      $cfg["N_PARALLEL"],
+        "--batch-size",    $cfg["BATCH_SIZE"],
+        "--temp",          $cfg["TEMPERATURE"],
+        "--repeat-penalty",$cfg["REPEAT_PENALTY"],
+        "--top-k",         $cfg["TOP_K"],
+        "--top-p",         $cfg["TOP_P"],
+        "--min-p",         $cfg["MIN_P"],
+        "--cache-type-k",  $cfg["CACHE_TYPE_K"],
+        "--cache-type-v",  $cfg["CACHE_TYPE_V"],
+        "--defrag-thold",  $cfg["DEFRAG_THOLD"],
+        "--metrics"
+    )
+    if ($cfg["ENABLE_JINJA"]       -eq "true") { $argList += "--jinja" }
+    if ($cfg["DISABLE_FLASH_ATTN"] -eq "true") { $argList += "--no-flash-attn" }
 
-    if ($cfg["ENABLE_JINJA"] -eq "true") { $argList += "--jinja" }
+    & $bin @argList
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""

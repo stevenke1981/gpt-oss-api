@@ -39,6 +39,10 @@ TOP_K="40"
 TOP_P="0.95"
 ENABLE_JINJA="false"
 MIN_P="0.05"
+CACHE_TYPE_K="q8_0"
+CACHE_TYPE_V="q8_0"
+DEFRAG_THOLD="0.1"
+DISABLE_FLASH_ATTN="false"
 
 if [[ -f "$CONFIG_FILE" ]]; then
     while IFS='=' read -r key val; do
@@ -47,19 +51,23 @@ if [[ -f "$CONFIG_FILE" ]]; then
         [[ "$key" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$key" ]] && continue
         case "$key" in
-            HOST)           HOST="$val" ;;
-            PORT)           PORT="$val" ;;
-            N_GPU_LAYERS)   N_GPU_LAYERS="$val" ;;
-            N_THREADS)      N_THREADS="$val" ;;
-            CTX_SIZE)       CTX_SIZE="$val" ;;
-            N_PARALLEL)     N_PARALLEL="$val" ;;
-            BATCH_SIZE)     BATCH_SIZE="$val" ;;
-            TEMPERATURE)    TEMPERATURE="$val" ;;
-            REPEAT_PENALTY) REPEAT_PENALTY="$val" ;;
-            TOP_K)          TOP_K="$val" ;;
-            TOP_P)          TOP_P="$val" ;;
-            MIN_P)          MIN_P="$val" ;;
-            ENABLE_JINJA)   ENABLE_JINJA="$val" ;;
+            HOST)                HOST="$val" ;;
+            PORT)                PORT="$val" ;;
+            N_GPU_LAYERS)        N_GPU_LAYERS="$val" ;;
+            N_THREADS)           N_THREADS="$val" ;;
+            CTX_SIZE)            CTX_SIZE="$val" ;;
+            N_PARALLEL)          N_PARALLEL="$val" ;;
+            BATCH_SIZE)          BATCH_SIZE="$val" ;;
+            TEMPERATURE)         TEMPERATURE="$val" ;;
+            REPEAT_PENALTY)      REPEAT_PENALTY="$val" ;;
+            TOP_K)               TOP_K="$val" ;;
+            TOP_P)               TOP_P="$val" ;;
+            MIN_P)               MIN_P="$val" ;;
+            ENABLE_JINJA)        ENABLE_JINJA="$val" ;;
+            CACHE_TYPE_K)        CACHE_TYPE_K="$val" ;;
+            CACHE_TYPE_V)        CACHE_TYPE_V="$val" ;;
+            DEFRAG_THOLD)        DEFRAG_THOLD="$val" ;;
+            DISABLE_FLASH_ATTN)  DISABLE_FLASH_ATTN="$val" ;;
         esac
     done < "$CONFIG_FILE"
 fi
@@ -237,22 +245,26 @@ start_server() {
 
     # 構建啟動命令
     local cmd_args=(
-        --model         "$model_path"
-        --host          "$HOST"
-        --port          "$PORT"
-        --ctx-size      "$CTX_SIZE"
-        --n-gpu-layers  "$N_GPU_LAYERS"
-        --threads       "$N_THREADS"
-        --parallel      "$N_PARALLEL"
-        --batch-size    "$BATCH_SIZE"
-        --temp          "$TEMPERATURE"
+        --model          "$model_path"
+        --host           "$HOST"
+        --port           "$PORT"
+        --ctx-size       "$CTX_SIZE"
+        --n-gpu-layers   "$N_GPU_LAYERS"
+        --threads        "$N_THREADS"
+        --parallel       "$N_PARALLEL"
+        --batch-size     "$BATCH_SIZE"
+        --temp           "$TEMPERATURE"
         --repeat-penalty "$REPEAT_PENALTY"
-        --top-k         "$TOP_K"
-        --top-p         "$TOP_P"
-        --min-p         "$MIN_P"
+        --top-k          "$TOP_K"
+        --top-p          "$TOP_P"
+        --min-p          "$MIN_P"
+        --cache-type-k   "$CACHE_TYPE_K"
+        --cache-type-v   "$CACHE_TYPE_V"
+        --defrag-thold   "$DEFRAG_THOLD"
         --metrics
     )
-    [[ "${ENABLE_JINJA,,}" == "true" ]] && cmd_args+=(--jinja)
+    [[ "${ENABLE_JINJA,,}" == "true" ]]          && cmd_args+=(--jinja)
+    [[ "${DISABLE_FLASH_ATTN,,}" == "true" ]]    && cmd_args+=(--no-flash-attn)
 
     # 執行
     exec "$llama_server" "${cmd_args[@]}"
