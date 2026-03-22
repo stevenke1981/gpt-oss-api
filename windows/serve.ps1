@@ -38,13 +38,17 @@ $cfg = @{
     DISABLE_FLASH_ATTN  = "false"
 }
 
-if (Test-Path $ConfigFile) {
-    Get-Content $ConfigFile | Where-Object { $_ -notmatch '^\s*[#\[]' -and $_ -match '=' } | ForEach-Object {
+function Import-ConfigFile ($path) {
+    if (-not (Test-Path $path)) { return }
+    Get-Content $path | Where-Object { $_ -notmatch '^\s*[#\[]' -and $_ -match '=' } | ForEach-Object {
         $parts = $_ -split '=', 2
         $k = $parts[0].Trim(); $v = $parts[1].Trim()
         if ($cfg.ContainsKey($k)) { $cfg[$k] = $v }
     }
 }
+
+Import-ConfigFile $ConfigFile
+Import-ConfigFile ($ConfigFile -replace '\.ini$', '.local.ini')
 if ($BindHost -ne "") { $cfg["HOST"] = $BindHost }
 if ($Port -ne 0)      { $cfg["PORT"] = $Port.ToString() }
 

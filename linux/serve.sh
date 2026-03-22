@@ -43,7 +43,9 @@ CACHE_TYPE_K="f16"
 CACHE_TYPE_V="f16"
 DISABLE_FLASH_ATTN="false"
 
-if [[ -f "$CONFIG_FILE" ]]; then
+load_config_file() {
+    local file="$1"
+    [[ ! -f "$file" ]] && return
     while IFS='=' read -r key val; do
         key="${key// /}"
         val="${val// /}"
@@ -67,8 +69,11 @@ if [[ -f "$CONFIG_FILE" ]]; then
             CACHE_TYPE_V)        CACHE_TYPE_V="$val" ;;
             DISABLE_FLASH_ATTN)  DISABLE_FLASH_ATTN="$val" ;;
         esac
-    done < "$CONFIG_FILE"
-fi
+    done < "$file"
+}
+
+load_config_file "$CONFIG_FILE"
+load_config_file "${CONFIG_FILE%.ini}.local.ini"
 
 # ─── 尋找 llama-server ────────────────────────────────────────
 find_llama_server() {

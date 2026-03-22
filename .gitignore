@@ -9,6 +9,9 @@ models/
 .DS_Store
 Thumbs.db
 
+# 本機設定覆蓋 (不進版控)
+config/settings.local.ini
+
 # 暫存檔
 *.tmp
 *.part
