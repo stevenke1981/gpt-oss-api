@@ -33,9 +33,8 @@ $cfg = @{
     TOP_P               = "0.95"
     MIN_P               = "0.05"
     ENABLE_JINJA        = "false"
-    CACHE_TYPE_K        = "q8_0"
-    CACHE_TYPE_V        = "q8_0"
-    DEFRAG_THOLD        = "0.1"
+    CACHE_TYPE_K        = "f16"
+    CACHE_TYPE_V        = "f16"
     DISABLE_FLASH_ATTN  = "false"
 }
 
@@ -183,7 +182,6 @@ function Start-Server ($bin, $modelPath) {
         "--min-p",         $cfg["MIN_P"],
         "--cache-type-k",  $cfg["CACHE_TYPE_K"],
         "--cache-type-v",  $cfg["CACHE_TYPE_V"],
-        "--defrag-thold",  $cfg["DEFRAG_THOLD"],
         "--metrics"
     )
     if ($cfg["ENABLE_JINJA"]       -eq "true") { $argList += "--jinja" }

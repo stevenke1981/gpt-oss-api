@@ -39,9 +39,8 @@ TOP_K="40"
 TOP_P="0.95"
 ENABLE_JINJA="false"
 MIN_P="0.05"
-CACHE_TYPE_K="q8_0"
-CACHE_TYPE_V="q8_0"
-DEFRAG_THOLD="0.1"
+CACHE_TYPE_K="f16"
+CACHE_TYPE_V="f16"
 DISABLE_FLASH_ATTN="false"
 
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -66,7 +65,6 @@ if [[ -f "$CONFIG_FILE" ]]; then
             ENABLE_JINJA)        ENABLE_JINJA="$val" ;;
             CACHE_TYPE_K)        CACHE_TYPE_K="$val" ;;
             CACHE_TYPE_V)        CACHE_TYPE_V="$val" ;;
-            DEFRAG_THOLD)        DEFRAG_THOLD="$val" ;;
             DISABLE_FLASH_ATTN)  DISABLE_FLASH_ATTN="$val" ;;
         esac
     done < "$CONFIG_FILE"
@@ -260,7 +258,6 @@ start_server() {
         --min-p          "$MIN_P"
         --cache-type-k   "$CACHE_TYPE_K"
         --cache-type-v   "$CACHE_TYPE_V"
-        --defrag-thold   "$DEFRAG_THOLD"
         --metrics
     )
     [[ "${ENABLE_JINJA,,}" == "true" ]]          && cmd_args+=(--jinja)
