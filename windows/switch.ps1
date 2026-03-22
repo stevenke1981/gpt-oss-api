@@ -16,7 +16,7 @@ function err   ($m) { Write-Host "[錯誤]    $m" -ForegroundColor Red }
 $Presets = @(
     [pscustomobject]@{ Name="純CPU";    Desc="安全模式，無 GPU，適合測試";              GPU=0;  CTX=4096;  Predict=-1; Parallel=1; Threads=8 }
     [pscustomobject]@{ Name="混合30層"; Desc="GPU+CPU，RTX 3060 12GB 推薦";            GPU=30; CTX=6144;  Predict=-1; Parallel=1; Threads=8 }
-    [pscustomobject]@{ Name="混合30層(32k)"; Desc="GPU+CPU，長文本 32k context";       GPU=30; CTX=32768; Predict=-1; Parallel=1; Threads=8 }
+    [pscustomobject]@{ Name="混合20層(32k)"; Desc="4層留CPU釋放VRAM，支援32k長文本";   GPU=20; CTX=32768; Predict=-1; Parallel=1; Threads=8 }
     [pscustomobject]@{ Name="混合35層"; Desc="GPU+CPU，記憶體較充裕時使用";             GPU=35; CTX=6144;  Predict=-1; Parallel=1; Threads=8 }
     [pscustomobject]@{ Name="全GPU";    Desc="全部 offload，VRAM 需夠用";              GPU=-1; CTX=8192;  Predict=-1; Parallel=2; Threads=4 }
     [pscustomobject]@{ Name="高並行";   Desc="多用戶，4 槽平行處理";                   GPU=30; CTX=4096;  Predict=-1; Parallel=4; Threads=8 }
