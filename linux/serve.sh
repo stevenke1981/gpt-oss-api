@@ -31,6 +31,7 @@ PORT="8080"
 N_GPU_LAYERS="0"
 N_THREADS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 CTX_SIZE="8192"
+N_PREDICT="-1"
 N_PARALLEL="4"
 BATCH_SIZE="512"
 TEMPERATURE="0.8"
@@ -57,6 +58,7 @@ load_config_file() {
             N_GPU_LAYERS)        N_GPU_LAYERS="$val" ;;
             N_THREADS)           N_THREADS="$val" ;;
             CTX_SIZE)            CTX_SIZE="$val" ;;
+            N_PREDICT)           N_PREDICT="$val" ;;
             N_PARALLEL)          N_PARALLEL="$val" ;;
             BATCH_SIZE)          BATCH_SIZE="$val" ;;
             TEMPERATURE)         TEMPERATURE="$val" ;;
@@ -252,6 +254,7 @@ start_server() {
         --host           "$HOST"
         --port           "$PORT"
         --ctx-size       "$CTX_SIZE"
+        --n-predict      "$N_PREDICT"
         --n-gpu-layers   "$N_GPU_LAYERS"
         --threads        "$N_THREADS"
         --parallel       "$N_PARALLEL"

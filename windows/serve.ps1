@@ -25,6 +25,7 @@ $cfg = @{
     N_GPU_LAYERS        = "0"
     N_THREADS           = ([System.Environment]::ProcessorCount).ToString()
     CTX_SIZE            = "8192"
+    N_PREDICT           = "-1"
     N_PARALLEL          = "4"
     BATCH_SIZE          = "512"
     TEMPERATURE         = "0.8"
@@ -175,6 +176,7 @@ function Start-Server ($bin, $modelPath) {
         "--host",          $cfg["HOST"],
         "--port",          $cfg["PORT"],
         "--ctx-size",      $cfg["CTX_SIZE"],
+        "--n-predict",     $cfg["N_PREDICT"],
         "--n-gpu-layers",  $cfg["N_GPU_LAYERS"],
         "--threads",       $cfg["N_THREADS"],
         "--parallel",      $cfg["N_PARALLEL"],
